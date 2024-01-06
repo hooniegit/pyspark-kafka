@@ -20,24 +20,39 @@ def infer_schema(json_data:dict):
     return StructType(fields)
 
 def receive_json(batchDF, batchId, spark):
-    from pyspark.sql.functions import col, from_json
+    from pyspark.sql.functions import from_json
     import json
     
     try:
-        df = batchDF \
-            .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
-
-        json_data = df.select(col("value")).first()[0]
+        # Create Schema
+        json_data = batchDF \
+            .selectExpr(
+                "CAST(value AS STRING)"
+            ) \
+            .select("value").first()[0]
         schema = infer_schema(json.loads(json_data))
         print(schema)
         
-        df.select(from_json(col("value").cast("string"), schema).alias("value")) \
-            .write \
+        # Change Datatype
+        df = batchDF \
+            .selectExpr(
+                "CAST(key AS STRING)",
+                "CAST(value AS STRING)"
+            ) \
+            .withColumn("value", from_json("value", schema))
+        
+        # Test
+        df.write \
             .format("console") \
             .save()                     
 
-        df.select(from_json(col("value").cast("string"), schema).alias("value")) \
-            .selectExpr("value.message", "value.date") \
+        # Test
+        df \
+            .selectExpr(
+                "key",
+                "value.message", 
+                "value.date"
+            ) \
             .write \
             .format("console") \
             .save()  
@@ -45,7 +60,10 @@ def receive_json(batchDF, batchId, spark):
     except Exception as E:
         print(f">>>>>>>> {E}")
         batchDF \
-            .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+            .selectExpr(
+                "CAST(key AS STRING)", 
+                "CAST(value AS STRING)"
+            ) \
             .write \
             .format("console") \
             .save()         
